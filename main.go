@@ -17,26 +17,55 @@ var products []Product
 
 func main() {
 	e := echo.New()
-	e.GET("/products", listProducts)
-	e.POST("/product", createProduct)
+	e.GET("/products", getProducts)
+	e.POST("/product", postProduct)
 	e.Logger.Fatal(e.Start(":9191"))
 }
 
-func listProducts(c echo.Context) error {
-	return c.JSON(200, products)
+func getProducts(c echo.Context) error {
+	products = readProducts()
+	return c.JSON(http.StatusOK, products)
 }
 
-func createProduct(c echo.Context) error {
+func readProducts() []Product {
+	db, err := sql.Open("sqlite3", "test.db")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	smtp, err := db.Prepare("SELECT name, price FROM products")
+	if err != nil {
+		panic(err)
+	}
+	rows, err := smtp.Query()
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		var price float64
+		err = rows.Scan(&name, &price)
+		if err != nil {
+			panic(err)
+		}
+		products = append(products, Product{Name: name, Price: price})
+	}
+	return products
+}
+
+func postProduct(c echo.Context) error {
 	product := Product{}
 	c.Bind(&product)
-	err := persistProduct(product)
+	err := createProduct(product)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, nil)
 	}
 	return c.JSON(http.StatusCreated, product)
 }
 
-func persistProduct(product Product) error {
+func createProduct(product Product) error {
 	db, err := sql.Open("sqlite3", "test.db")
 	if err != nil {
 		panic(err)
